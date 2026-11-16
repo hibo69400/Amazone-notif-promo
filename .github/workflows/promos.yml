@@ -1,0 +1,51 @@
+name: Alertes promos Amazon
+
+on:
+  schedule:
+    - cron: "4-59/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      essai:
+        description: "Essai : afficher les offres sans envoyer de notification"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["promo_bot.py", "config.json", ".github/workflows/promos.yml"]
+
+concurrency:
+  group: promos
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  promos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Retrouver les offres déjà notifiées
+        uses: actions/cache/restore@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}
+          restore-keys: etat-
+      - name: Chercher les promos
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          ESSAI: ${{ inputs.essai }}
+        run: |
+          if [ "$ESSAI" = "true" ] || [ -z "$NTFY_TOPIC" ]; then
+            echo "Mode essai : rien n'est envoyé (secret NTFY_TOPIC absent ou essai demandé)."
+            python3 promo_bot.py --essai
+          else
+            python3 promo_bot.py
+          fi
+      - name: Mémoriser les offres notifiées
+        if: always() && hashFiles('etat.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: etat.json
+          key: etat-${{ github.run_id }}

@@ -1,0 +1,15 @@
+name: Tests
+
+on:
+  push:
+    paths: ["**.py", "config.json", ".github/workflows/tests.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: python3 -m unittest discover -s tests -t . -v
