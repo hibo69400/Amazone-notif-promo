@@ -1,8 +1,11 @@
 name: Alertes promos Amazon
 
+# Le bot se relance tout seul : chaque passage attend quelques minutes puis
+# déclenche le suivant. L'horaire GitHub ci-dessous ne sert que de filet de
+# sécurité, pour redémarrer la chaîne si elle s'arrête.
 on:
   schedule:
-    - cron: "4,14,24,34,44,54 * * * *"
+    - cron: "7,37 * * * *"
   workflow_dispatch:
     inputs:
       essai:
@@ -19,11 +22,18 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write
+
+env:
+  # Dernier jour où le bot se relance tout seul toutes les 10 minutes.
+  # Après cette date, il ne passe plus qu'à l'horaire GitHub (toutes les 30 minutes).
+  RELAIS_DERNIER_JOUR: "2026-12-01"
+  PAUSE_SECONDES: "480"
 
 jobs:
   promos:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v5
       - name: Retrouver les offres déjà notifiées
@@ -49,3 +59,23 @@ jobs:
         with:
           path: etat.json
           key: etat-${{ github.run_id }}
+      - name: Attendre puis lancer le passage suivant
+        # Pas de relance après un essai, ni si quelqu'un annule ce passage (c'est la façon d'arrêter le bot).
+        if: ${{ !cancelled() && inputs.essai != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [[ "$(TZ=Europe/Paris date +%F)" > "$RELAIS_DERNIER_JOUR" ]]; then
+            echo "Relance automatique terminée depuis le $RELAIS_DERNIER_JOUR : prochain passage à l'horaire GitHub."
+            exit 0
+          fi
+          sleep "$PAUSE_SECONDES"
+          en_attente=$(gh run list --workflow promos.yml --limit 20 --json status \
+            --jq '[.[] | select(.status == "queued" or .status == "pending" or .status == "waiting" or .status == "requested")] | length')
+          if [ "$en_attente" != "0" ]; then
+            echo "Un passage attend déjà son tour : il prend le relais."
+          else
+            gh workflow run promos.yml --ref "${{ github.ref_name }}"
+            echo "Passage suivant lancé."
+          fi

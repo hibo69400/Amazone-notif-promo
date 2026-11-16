@@ -5,6 +5,17 @@ et qui envoie une notification sur le téléphone dès qu'une offre atteint **30
 
 Il tourne tout seul sur GitHub, toutes les 10 minutes environ. Aucun ordinateur à laisser allumé.
 
+## Comment il se relance tout seul
+
+Chaque passage cherche les promos, attend 8 minutes, puis déclenche lui-même le passage suivant.
+L'horaire GitHub (toutes les 30 minutes) ne sert que de filet de sécurité si cette chaîne s'arrête.
+
+- **Arrêter le bot** : onglet **Actions**, **Alertes promos Amazon**, menu **...**, **Disable workflow**.
+- **Le redémarrer** : **Enable workflow**, puis **Run workflow**.
+- La relance toutes les 10 minutes s'arrête après le 1er décembre 2026 (fin du Black Friday), pour ne pas
+  occuper une machine GitHub en permanence. Ensuite le bot passe toutes les 30 minutes environ.
+  Pour prolonger, changer `RELAIS_DERNIER_JOUR` dans `.github/workflows/promos.yml`.
+
 ## Recevoir les notifications
 
 1. Installer l'application **ntfy** (iPhone ou Android), gratuite et sans compte.
