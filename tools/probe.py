@@ -1,12 +1,16 @@
-"""Diagnostic : regarde ce que contiennent les flux, pour les offres Amazon uniquement."""
-import html
+"""Diagnostic : flux par marque et contenu d'une page d'offre."""
 import re
+import time
 import urllib.request
 import xml.etree.ElementTree as ET
-from collections import Counter
 
 UA = "Mozilla/5.0 (compatible; promo-notif-bot/1.0; +https://github.com/hibo69400/Amazone-notif-promo)"
 NS = {"pepper": "http://www.pepper.com/rss"}
+SLUGS = """beaba cybex maxi-cosi kinderkraft chicco joie bosch samsung roborock ecovacs ninja tefal zwilling
+moulinex cosori delonghi de-longhi krups dyson nespresso karcher hugo-boss boss nike under-armour adidas
+calvin-klein lacoste swarovski fossil amazon-essentials real-techniques maybelline l-oreal loreal l-oreal-paris
+nyx nyx-professional-makeup erborian ghd color-wow biodance medicube kerastase olaplex
+mode vetements beaute sante-cosmetiques mode-accessoires maquillage soin-des-cheveux amazon""".split()
 
 
 def get(url):
@@ -15,55 +19,32 @@ def get(url):
         return r.status, r.read()
 
 
-def text(s):
-    return re.sub(r"\s+", " ", html.unescape(re.sub(r"<[^>]+>", " ", s or ""))).strip()
-
-
-for url in ["https://www.dealabs.com/rss/nouveaux", "https://www.dealabs.com/rss/hot",
-            "https://www.dealabs.com/rss/nouveaux?page=2"]:
+first_amazon_link = None
+for slug in SLUGS:
+    url = f"https://www.dealabs.com/rss/groupe/{slug}"
     try:
         status, body = get(url)
+        root = ET.fromstring(body)
+        items = root.findall("./channel/item")
+        amz = [i for i in items if "amazon" in (i.find("pepper:merchant", NS).attrib.get("name", "") if i.find("pepper:merchant", NS) is not None else "").lower()]
+        dates = [i.findtext("pubDate")[5:22] for i in items]
+        print(f"{slug:28} {status} items={len(items):2} amazon={len(amz):2} | {root.findtext('./channel/title')[:50]} | {dates[:3]} ... {dates[-1:] }")
+        if amz and first_amazon_link is None and slug == "dyson":
+            first_amazon_link = amz[0].findtext("link")
     except Exception as e:  # noqa: BLE001
-        print(f"\n##### {url} -> ERREUR {e}")
+        print(f"{slug:28} ERREUR {e}")
+    time.sleep(0.4)
+
+for link in [first_amazon_link, "https://www.dealabs.com/bons-plans/krups-sensation-lait-machine-espresso-automatique-compacte-15-bars-3458106"]:
+    if not link:
         continue
-    items = ET.fromstring(body).findall("./channel/item")
-    merchants = Counter()
-    print(f"\n##### {url} -> {status}, {len(items)} items")
-    shown = 0
-    for it in items:
-        m = it.find("pepper:merchant", NS)
-        attrs = dict(m.attrib) if m is not None else {}
-        merchants[attrs.get("name", "?")] += 1
-        if "amazon" in attrs.get("name", "").lower() and shown < 8:
-            shown += 1
-            print("---")
-            print("merchant:", attrs)
-            print("title:", it.findtext("title"))
-            print("link:", it.findtext("link"))
-            print("guid:", it.findtext("guid"), "| pubDate:", it.findtext("pubDate"))
-            print("cats:", [c.text for c in it.findall("category")])
-            print("desc:", text(it.findtext("description"))[:500])
-    print("marchands:", merchants.most_common(12))
-    if items:
-        print("premier pubDate:", items[0].findtext("pubDate"), "| dernier:", items[-1].findtext("pubDate"))
-
-for url in ["https://www.dealabs.com/rss/tag/amazon", "https://www.dealabs.com/rss/marchand/amazon",
-            "https://www.dealabs.com/rss/merchant/amazon", "https://www.dealabs.com/rss/bons-plans/amazon",
-            "https://www.dealabs.com/rss/groupe/electromenager", "https://www.dealabs.com/rss/groupe/puericulture",
-            "https://fr.camelcamelcamel.com/top_drops/feed?t=recent",
-            "https://fr.camelcamelcamel.com/top_drops/feed?t=daily&p=2",
-            "https://fr.camelcamelcamel.com/top_drops/feed?t=weekly",
-            "https://fr.camelcamelcamel.com/top_drops/feed?bn=kitchen",
-            "https://fr.camelcamelcamel.com/top_drops/feed?bn=baby",
-            "https://fr.camelcamelcamel.com/top_drops/feed?s=relative",
-            "https://fr.camelcamelcamel.com/popular.xml",
-            "https://fr.camelcamelcamel.com/search?sq=dyson"]:
+    print("\n##### page offre", link)
     try:
-        status, body = get(url)
+        status, body = get(link)
         s = body.decode("utf-8", "replace")
-        titles = re.findall(r"<title>(.*?)</title>", s, flags=re.S)
-        print(f"\n##### {url} -> {status}, {len(body)} octets, {len(titles)} titres")
-        for t in titles[:6]:
-            print("   ", t.strip()[:200])
+        print(status, len(s))
+        for key in ["nextBestPrice", "\"price\"", "percentage", "displayPrice", "priceDiscount", "amazon.fr", "threadId", "isExpired", "visit/thread"]:
+            for m in list(re.finditer(re.escape(key), s))[:3]:
+                print(f"  [{key}] ...{s[max(0, m.start()-150):m.start()+250]!r}")
     except Exception as e:  # noqa: BLE001
-        print(f"\n##### {url} -> ERREUR {e}")
+        print("ERREUR", e)
