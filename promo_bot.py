@@ -188,6 +188,7 @@ def choisir_offres(offres, config, etat, maintenant, charger_page):
     candidates.sort(key=lambda o: o["date"] or maintenant, reverse=True)
 
     retenues = []
+    ecartees = {"remise trop faible": 0, "sans prix d'origine": 0}
     for offre in candidates:
         if len(retenues) >= config["max_notifications_par_passage"]:
             break
@@ -211,6 +212,10 @@ def choisir_offres(offres, config, etat, maintenant, charger_page):
             retenues.append(offre)
         else:
             vus[offre["id"]] = maintenant.isoformat()
+            ecartees["sans prix d'origine" if offre["remise"] is None else "remise trop faible"] += 1
+    print(f"{len(candidates)} nouvelle(s) offre(s) Amazon de tes marques : {len(retenues)} retenue(s), "
+          f"{ecartees['remise trop faible']} sous {config['remise_minimum']} %, "
+          f"{ecartees["sans prix d'origine"]} sans prix d'origine.")
     return retenues
 
 
